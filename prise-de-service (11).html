@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prise de service</title>
+<style>
+  :root{
+    --bg:#0B1220;
+    --panel:#111A2E;
+    --panel-2:#0E1626;
+    --border:#22304A;
+    --border-strong:#33456B;
+    --cyan:#4FD9E8;
+    --violet:#9B7CF0;
+    --text:#E8ECF4;
+    --text-dim:#8592AD;
+    --ok:#3FDB8F;
+    --danger:#F0708C;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(circle at top, #10182B 0%, #0B1220 60%);
+    color:var(--text);
+    font-family:'Segoe UI', system-ui, sans-serif;
+    min-height:100vh;
+    padding:24px 16px 60px;
+  }
+  .wrap{max-width:480px;margin:0 auto;}
+  .brand{
+    text-align:center;
+    margin-bottom:22px;
+    position:relative;
+  }
+  .brand .eyebrow{
+    font-size:11px;
+    letter-spacing:3px;
+    color:var(--cyan);
+    text-transform:uppercase;
+    font-weight:600;
+  }
+  .brand h1{
+    font-size:22px;
+    font-weight:600;
+    margin:6px 0 4px;
+    letter-spacing:0.5px;
+  }
+  .brand .date{
+    font-size:13px;
+    color:var(--text-dim);
+    text-transform:capitalize;
+  }
+  .admin-link{
+    display:block;
+    text-align:center;
+    font-size:11px;
+    color:var(--text-dim);
+    margin-top:14px;
+    cursor:pointer;
+    text-decoration:underline;
+    text-underline-offset:3px;
+  }
+  .admin-link:hover{color:var(--cyan);}
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px;
+    margin-bottom:16px;
+    position:relative;
+    overflow:hidden;
+  }
+  .card::before{
+    content:"";
+    position:absolute;
+    top:0;left:0;right:0;
+    height:2px;
+    background:linear-gradient(90deg, var(--cyan), var(--violet));
+  }
+  label{
+    display:block;
+    font-size:12px;
+    color:var(--text-dim);
+    margin-bottom:6px;
+    letter-spacing:0.3px;
+  }
+  input[type=text], input[type=password], select{
+    width:100%;
+    background:var(--panel-2);
+    border:1px solid var(--border-strong);
+    border-radius:8px;
+    color:var(--text);
+    padding:11px 12px;
+    font-size:15px;
+    margin-bottom:14px;
+    outline:none;
+  }
+  input:focus, select:focus{
+    border-color:var(--cyan);
+  }
+  button{
+    width:100%;
+    background:linear-gradient(90deg, var(--cyan), var(--violet));
+    border:none;
+    border-radius:8px;
+    color:#08101F;
+    font-weight:600;
+    font-size:15px;
+    padding:13px;
+    cursor:pointer;
+    transition:opacity 0.15s, transform 0.1s;
+  }
+  button:hover{opacity:0.92;}
+  button:active{transform:scale(0.98);}
+  button:disabled{opacity:0.5;cursor:not-allowed;}
+  .error{
+    color:var(--danger);
+    font-size:12px;
+    margin:-8px 0 12px;
+  }
+  .success-banner{
+    display:none;
+    align-items:center;
+    gap:8px;
+    background:rgba(63,219,143,0.1);
+    border:1px solid rgba(63,219,143,0.35);
+    color:var(--ok);
+    border-radius:8px;
+    padding:11px 13px;
+    font-size:14px;
+    margin-bottom:14px;
+  }
+  .log-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:10px;
+  }
+  .log-header h2{
+    font-size:14px;
+    font-weight:600;
+    margin:0;
+    color:var(--text-dim);
+    letter-spacing:0.3px;
+    text-transform:uppercase;
+  }
+  .log-count{
+    font-size:13px;
+    color:var(--cyan);
+    font-weight:600;
+  }
+  .log-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    max-height:340px;
+    overflow-y:auto;
+  }
+  .log-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px 12px;
+  }
+  .log-item .name{
+    font-size:14px;
+    font-weight:500;
+  }
+  .log-item .site{
+    font-size:11px;
+    color:var(--text-dim);
+    margin-top:2px;
+  }
+  .log-item .time{
+    font-size:13px;
+    color:var(--ok);
+    font-variant-numeric:tabular-nums;
+    font-weight:600;
+  }
+  .empty{
+    text-align:center;
+    color:var(--text-dim);
+    font-size:13px;
+    padding:24px 0;
+  }
+  .foot{
+    text-align:center;
+    font-size:11px;
+    color:var(--text-dim);
+    margin-top:20px;
+  }
+  .back-link{
+    display:inline-block;
+    font-size:12px;
+    color:var(--text-dim);
+    margin-bottom:16px;
+    cursor:pointer;
+    text-decoration:underline;
+    text-underline-offset:3px;
+  }
+  .back-link:hover{color:var(--cyan);}
+  .hidden{display:none !important;}
+  .badge-admin{
+    display:inline-block;
+    font-size:10px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    color:var(--violet);
+    border:1px solid var(--violet);
+    border-radius:20px;
+    padding:2px 9px;
+    margin-bottom:10px;
+  }
+  .stats-row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .stat-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:14px 16px;
+  }
+  .stat-card .stat-label{
+    font-size:11px;
+    color:var(--text-dim);
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    margin-bottom:4px;
+  }
+  .stat-card .stat-value{
+    font-size:24px;
+    font-weight:600;
+    color:var(--cyan);
+  }
+  .day-group{
+    margin-bottom:18px;
+  }
+  .day-group:last-child{
+    margin-bottom:0;
+  }
+  .day-heading{
+    font-size:12px;
+    color:var(--text-dim);
+    text-transform:capitalize;
+    letter-spacing:0.3px;
+    margin:0 0 8px;
+    padding-bottom:6px;
+    border-bottom:1px solid var(--border);
+  }
+  .search-box{
+    margin-bottom:14px;
+  }
+  .brand-mark{
+    position:absolute;
+    top:20px;
+    right:16px;
+    display:flex;
+    gap:5px;
+    background:transparent;
+  }
+  .brand-mark span{
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#E4002B;
+    display:block;
+  }
+</style>
+</head>
+<body>
+<div class="brand-mark"><span></span><span></span><span></span></div>
+<div class="wrap">
+
+  <!-- ===== VUE AGENT ===== -->
+  <div id="agentView">
+    <div class="brand">
+      <div class="eyebrow">Securitas &middot; Contrôle de service</div>
+      <h1>Prise de service</h1>
+      <div class="date" id="dateLabel"></div>
+      <span class="admin-link" id="showAdminLogin">Accès administrateur</span>
+    </div>
+
+    <div class="card">
+      <div class="success-banner" id="successBanner">
+        <span>&#10003;</span>
+        <span id="successText">Prise de service validée.</span>
+      </div>
+
+      <label for="agentName">Nom de l'agent</label>
+      <input type="text" id="agentName" placeholder="Nom Prénom" autocomplete="off">
+      <div class="error" id="nameError" style="display:none;">Entrez votre nom avant de valider.</div>
+
+      <label for="siteSelect">Site</label>
+      <select id="siteSelect">
+        <option value="New Yorker - Montigny">New Yorker &mdash; Montigny-le-Bretonneux</option>
+        <option value="New Yorker - Kremlin-Bicêtre">New Yorker &mdash; Kremlin-Bicêtre</option>
+        <option value="New Yorker - La Défense">New Yorker &mdash; La Défense</option>
+        <option value="New Yorker - Thiais Belle Épine">New Yorker &mdash; Thiais Belle Épine</option>
+        <option value="New Yorker - Sainte-Geneviève">New Yorker &mdash; Sainte-Geneviève</option>
+        <option value="Autre">Autre site</option>
+      </select>
+
+      <button id="validateBtn">Valider ma prise de service</button>
+    </div>
+
+    <div class="foot">Votre validation est horodatée et transmise à l'administrateur.</div>
+  </div>
+
+  <!-- ===== VUE CONNEXION ADMIN ===== -->
+  <div id="adminLoginView" class="hidden">
+    <span class="back-link" id="backFromLogin">&larr; Retour</span>
+    <div class="brand" style="text-align:left; margin-bottom:16px;">
+      <div class="eyebrow">Espace protégé</div>
+      <h1 style="font-size:19px;">Accès administrateur</h1>
+    </div>
+    <div class="card">
+      <label for="adminCode">Code d'accès</label>
+      <input type="password" id="adminCode" placeholder="&bull;&bull;&bull;&bull;" inputmode="numeric" maxlength="4" autocomplete="off">
+      <div class="error" id="codeError" style="display:none;">Code incorrect.</div>
+      <button id="loginBtn">Se connecter</button>
+    </div>
+  </div>
+
+  <!-- ===== VUE ADMIN ===== -->
+  <div id="adminView" class="hidden">
+    <span class="back-link" id="backFromAdmin">&larr; Retour à la vue agent</span>
+    <div class="brand" style="text-align:left; margin-bottom:16px;">
+      <span class="badge-admin">Administrateur</span>
+      <h1 style="font-size:19px; margin:0 0 4px;">Suivi complet des prises de service</h1>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Total enregistré</div>
+        <div class="stat-value" id="statTotal">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Agents distincts</div>
+        <div class="stat-value" id="statAgents">0</div>
+      </div>
+    </div>
+
+    <div class="card search-box">
+      <label for="searchInput">Rechercher un agent ou un site</label>
+      <input type="text" id="searchInput" placeholder="Ex : Pedro, La Défense..." autocomplete="off">
+    </div>
+
+    <div class="card">
+      <div class="log-header">
+        <h2>Historique</h2>
+        <span class="log-count" id="logCount">0</span>
+      </div>
+      <div class="log-list" id="logList" style="max-height:480px;">
+        <div class="empty">Aucune prise de service enregistrée pour l'instant.</div>
+      </div>
+    </div>
+    <div class="foot">Mise à jour automatique toutes les 15 secondes.</div>
+  </div>
+
+</div>
+
+<script>
+const ADMIN_CODE = "1234"; // à modifier si besoin
+
+// Colle ici l'URL /exec récupérée depuis Apps Script (Déployer > Application Web)
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwtuYkybPf2KSGsEldurSNtCisl_DHceJ71ufb1vIvdD73Rhl4SJeTzilBuvwnbgFVt/exec";
+
+function formatDateLabel(){
+  const d = new Date();
+  const opts = { weekday:'long', day:'numeric', month:'long', year:'numeric' };
+  return d.toLocaleDateString('fr-FR', opts);
+}
+
+function formatTime(iso){
+  const d = new Date(iso);
+  return d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function loadEntries(){
+  try{
+    const res = await fetch(BACKEND_URL, { method: 'GET' });
+    if(!res.ok) return [];
+    return await res.json();
+  }catch(e){
+    return [];
+  }
+}
+
+async function saveEntry(name, site){
+  // mode no-cors : on ne peut pas lire la réponse, mais l'écriture
+  // côté Apps Script s'exécute quand même normalement.
+  await fetch(BACKEND_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ name, site })
+  });
+
+  // Comme la réponse est opaque en no-cors, on vérifie que
+  // l'entrée est bien arrivée en relisant les données.
+  await new Promise(r => setTimeout(r, 900));
+  const entries = await loadEntries();
+  const justAdded = entries.some(e => e.name === name && e.site === site);
+  if(!justAdded){
+    throw new Error('non confirmé');
+  }
+  return { success: true };
+}
+
+// ---- Navigation entre vues ----
+const agentView = document.getElementById('agentView');
+const adminLoginView = document.getElementById('adminLoginView');
+const adminView = document.getElementById('adminView');
+
+function showView(view){
+  agentView.classList.add('hidden');
+  adminLoginView.classList.add('hidden');
+  adminView.classList.add('hidden');
+  view.classList.remove('hidden');
+}
+
+document.getElementById('showAdminLogin').addEventListener('click', () => {
+  showView(adminLoginView);
+  document.getElementById('adminCode').value = '';
+  document.getElementById('codeError').style.display = 'none';
+  document.getElementById('adminCode').focus();
+});
+
+document.getElementById('backFromLogin').addEventListener('click', () => showView(agentView));
+document.getElementById('backFromAdmin').addEventListener('click', () => showView(agentView));
+
+document.getElementById('loginBtn').addEventListener('click', () => {
+  const input = document.getElementById('adminCode');
+  const err = document.getElementById('codeError');
+  if(input.value === ADMIN_CODE){
+    err.style.display = 'none';
+    showView(adminView);
+    refreshAdminLog();
+  }else{
+    err.style.display = 'block';
+    input.value = '';
+    input.focus();
+  }
+});
+
+document.getElementById('adminCode').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter') document.getElementById('loginBtn').click();
+});
+
+// ---- Vue agent : validation ----
+document.getElementById('dateLabel').textContent = formatDateLabel();
+
+document.getElementById('validateBtn').addEventListener('click', async () => {
+  const nameInput = document.getElementById('agentName');
+  const siteSelect = document.getElementById('siteSelect');
+  const nameError = document.getElementById('nameError');
+  const btn = document.getElementById('validateBtn');
+  const banner = document.getElementById('successBanner');
+  const successText = document.getElementById('successText');
+
+  const name = nameInput.value.trim();
+  if(!name){
+    nameError.style.display = 'block';
+    nameInput.focus();
+    return;
+  }
+  nameError.style.display = 'none';
+
+  btn.disabled = true;
+  btn.textContent = 'Validation...';
+
+  try{
+    await saveEntry(name, siteSelect.value);
+    const now = new Date();
+
+    successText.textContent = `Prise de service validée à ${formatTime(now.toISOString())}. Transmise à l'administrateur.`;
+    banner.style.display = 'flex';
+    nameInput.value = '';
+  }catch(e){
+    nameError.textContent = "Erreur d'enregistrement, réessayez.";
+    nameError.style.display = 'block';
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Valider ma prise de service';
+  }
+});
+
+// ---- Vue admin : récapitulatif complet ----
+let allEntriesCache = [];
+
+function formatDayHeading(iso){
+  const d = new Date(iso);
+  const opts = { weekday:'long', day:'numeric', month:'long', year:'numeric' };
+  return d.toLocaleDateString('fr-FR', opts);
+}
+
+function dayKey(iso){
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function renderLog(entries){
+  const list = document.getElementById('logList');
+  const count = document.getElementById('logCount');
+  const statTotal = document.getElementById('statTotal');
+  const statAgents = document.getElementById('statAgents');
+
+  count.textContent = entries.length;
+  statTotal.textContent = allEntriesCache.length;
+  statAgents.textContent = new Set(allEntriesCache.map(e => e.name.trim().toLowerCase())).size;
+
+  if(entries.length === 0){
+    list.innerHTML = '<div class="empty">Aucune prise de service enregistrée pour l\'instant.</div>';
+    return;
+  }
+
+  const sorted = [...entries].sort((a,b) => new Date(b.time) - new Date(a.time));
+
+  const groups = [];
+  let currentKey = null;
+  let currentGroup = null;
+  for(const e of sorted){
+    const k = dayKey(e.time);
+    if(k !== currentKey){
+      currentKey = k;
+      currentGroup = { heading: formatDayHeading(e.time), items: [] };
+      groups.push(currentGroup);
+    }
+    currentGroup.items.push(e);
+  }
+
+  list.innerHTML = groups.map(g => `
+    <div class="day-group">
+      <div class="day-heading">${escapeHtml(g.heading)}</div>
+      ${g.items.map(e => `
+        <div class="log-item" style="margin-bottom:8px;">
+          <div>
+            <div class="name">${escapeHtml(e.name)}</div>
+            <div class="site">${escapeHtml(e.site)}</div>
+          </div>
+          <div class="time">${formatTime(e.time)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function applyFilter(){
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  if(!q){
+    renderLog(allEntriesCache);
+    return;
+  }
+  const filtered = allEntriesCache.filter(e =>
+    e.name.toLowerCase().includes(q) || e.site.toLowerCase().includes(q)
+  );
+  renderLog(filtered);
+}
+
+document.getElementById('searchInput').addEventListener('input', applyFilter);
+
+async function refreshAdminLog(){
+  if(adminView.classList.contains('hidden')) return;
+  allEntriesCache = await loadEntries();
+  applyFilter();
+}
+
+setInterval(refreshAdminLog, 15000);
+</script>
+
+</body>
+</html>
