@@ -301,6 +301,61 @@
     background:rgba(240,112,140,0.12);
     border-color:var(--danger);
   }
+  .export-panel{
+    margin-bottom:14px;
+  }
+  .export-row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  .export-row label{
+    margin-top:6px;
+  }
+  input[type=date]{
+    width:100%;
+    background:var(--panel-2);
+    border:1px solid var(--border-strong);
+    border-radius:8px;
+    color:var(--text);
+    padding:10px 12px;
+    font-size:14px;
+    margin-bottom:14px;
+    outline:none;
+    color-scheme:dark;
+  }
+  .notif-toast{
+    position:fixed;
+    top:20px;
+    left:50%;
+    transform:translateX(-50%) translateY(-20px);
+    background:var(--panel);
+    border:1px solid var(--cyan);
+    border-radius:10px;
+    padding:12px 18px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:14px;
+    color:var(--text);
+    box-shadow:0 8px 24px rgba(0,0,0,0.4);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.25s, transform 0.25s;
+    z-index:999;
+    max-width:90vw;
+  }
+  .notif-toast.show{
+    opacity:1;
+    transform:translateX(-50%) translateY(0);
+  }
+  .notif-toast .dot{
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    background:var(--ok);
+    flex-shrink:0;
+  }
   .brand-mark{
     position:absolute;
     top:20px;
@@ -396,6 +451,34 @@
       <button id="sortByDate">Trier par date</button>
     </div>
 
+    <div class="card export-panel">
+      <label for="exportSite">Site à exporter</label>
+      <select id="exportSite">
+        <option value="">Tous les sites</option>
+        <option value="New Yorker - Montigny">New Yorker — Montigny-le-Bretonneux</option>
+        <option value="New Yorker - Kremlin-Bicêtre">New Yorker — Kremlin-Bicêtre</option>
+        <option value="New Yorker - La Défense">New Yorker — La Défense</option>
+        <option value="New Yorker - Thiais Belle Épine">New Yorker — Thiais Belle Épine</option>
+        <option value="New Yorker - Sainte-Geneviève">New Yorker — Sainte-Geneviève</option>
+        <option value="Autre">Autre site</option>
+      </select>
+
+      <div class="export-row">
+        <div>
+          <label for="exportFrom">Du</label>
+          <input type="date" id="exportFrom">
+        </div>
+        <div>
+          <label for="exportTo">Au</label>
+          <input type="date" id="exportTo">
+        </div>
+      </div>
+
+      <button id="exportPdfBtn" style="background:var(--panel-2); border:1px solid var(--border-strong); color:var(--text);">
+        &#128190; Exporter en PDF
+      </button>
+    </div>
+
     <div class="card search-box">
       <label for="searchInput">Rechercher un agent ou un site</label>
       <input type="text" id="searchInput" placeholder="Ex : Pedro, La Défense..." autocomplete="off">
@@ -415,6 +498,7 @@
 
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 const ADMIN_CODE = "1234"; // à modifier si besoin
 
@@ -687,6 +771,127 @@ document.getElementById('logList').addEventListener('click', (e) => {
   btn.disabled = true;
   deleteEntry(time, name, site);
 });
+
+// ---- Export PDF ----
+function entriesForExport(){
+  const site = document.getElementById('exportSite').value;
+  const fromVal = document.getElementById('exportFrom').value;
+  const toVal = document.getElementById('exportTo').value;
+
+  const from = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+  const to = toVal ? new Date(toVal + 'T23:59:59') : null;
+
+  return allEntriesCache.filter(e => {
+    if(site && e.site !== site) return false;
+    const t = new Date(e.time);
+    if(from && t < from) return false;
+    if(to && t > to) return false;
+    return true;
+  });
+}
+
+document.getElementById('exportPdfBtn').addEventListener('click', () => {
+  const entries = entriesForExport();
+  if(entries.length === 0){
+    alert('Aucune donnée ne correspond à ces filtres.');
+    return;
+  }
+
+  const site = document.getElementById('exportSite').value;
+  const fromVal = document.getElementById('exportFrom').value;
+  const toVal = document.getElementById('exportTo').value;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginLeft = 14;
+  let y = 20;
+
+  doc.setFontSize(16);
+  doc.setFont(undefined, 'bold');
+  doc.text('Securitas — Récapitulatif des prises de service', marginLeft, y);
+  y += 7;
+
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(120);
+  doc.text(`Généré le ${formatDateLabel()} — ${entries.length} entrée(s)`, marginLeft, y);
+  y += 5;
+  const siteLabel = site ? site : 'Tous les sites';
+  const periodLabel = (fromVal || toVal)
+    ? `Période : ${fromVal || '...'} au ${toVal || '...'}`
+    : 'Période : toutes dates confondues';
+  doc.text(`Site : ${siteLabel}  —  ${periodLabel}`, marginLeft, y);
+  doc.setTextColor(0);
+  y += 10;
+
+  const groupedList = sortMode === 'site'
+    ? groupEntriesForExport(entries, 'site')
+    : groupEntriesForExport(entries, 'date');
+
+  doc.setFontSize(9);
+
+  for(const group of groupedList){
+    if(y > pageHeight - 25){
+      doc.addPage();
+      y = 20;
+    }
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(11);
+    doc.text(`${group.heading} (${group.items.length})`, marginLeft, y);
+    y += 6;
+
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(9);
+    doc.setDrawColor(220);
+    doc.line(marginLeft, y - 2, 196, y - 2);
+
+    for(const e of group.items){
+      if(y > pageHeight - 15){
+        doc.addPage();
+        y = 20;
+      }
+      const line = sortMode === 'site'
+        ? `${formatTime(e.time)}  —  ${e.name}  (${formatDayHeading(e.time)})`
+        : `${formatTime(e.time)}  —  ${e.name}  —  ${e.site}`;
+      doc.text(line, marginLeft, y);
+      y += 6;
+    }
+    y += 4;
+  }
+
+  doc.save(`prises-de-service-${new Date().toISOString().slice(0,10)}.pdf`);
+});
+
+function groupEntriesForExport(entries, mode){
+  if(mode === 'site'){
+    const bySite = {};
+    for(const e of entries){
+      const key = e.site || 'Autre';
+      if(!bySite[key]) bySite[key] = [];
+      bySite[key].push(e);
+    }
+    return Object.keys(bySite).sort((a,b) => a.localeCompare(b, 'fr')).map(site => ({
+      heading: site,
+      items: [...bySite[site]].sort((a,b) => new Date(b.time) - new Date(a.time))
+    }));
+  } else {
+    const sorted = [...entries].sort((a,b) => new Date(b.time) - new Date(a.time));
+    const groups = [];
+    let currentKey = null;
+    let currentGroup = null;
+    for(const e of sorted){
+      const k = dayKey(e.time);
+      if(k !== currentKey){
+        currentKey = k;
+        currentGroup = { heading: formatDayHeading(e.time), items: [] };
+        groups.push(currentGroup);
+      }
+      currentGroup.items.push(e);
+    }
+    return groups;
+  }
+}
 
 function applyFilter(){
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
