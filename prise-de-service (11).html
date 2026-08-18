@@ -257,6 +257,50 @@
   .search-box{
     margin-bottom:14px;
   }
+  .sort-toggle{
+    display:flex;
+    gap:8px;
+    margin-bottom:14px;
+  }
+  .sort-toggle button{
+    flex:1;
+    background:var(--panel);
+    border:1px solid var(--border-strong);
+    color:var(--text-dim);
+    font-weight:500;
+    font-size:13px;
+    padding:9px;
+  }
+  .sort-toggle button.active{
+    background:linear-gradient(90deg, var(--cyan), var(--violet));
+    color:#08101F;
+    font-weight:600;
+    border-color:transparent;
+  }
+  .log-item{
+    position:relative;
+  }
+  .delete-entry-btn{
+    width:28px;
+    height:28px;
+    min-width:28px;
+    padding:0;
+    margin-left:10px;
+    background:transparent;
+    border:1px solid var(--border-strong);
+    border-radius:6px;
+    color:var(--danger);
+    font-size:14px;
+    line-height:1;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .delete-entry-btn:hover{
+    background:rgba(240,112,140,0.12);
+    border-color:var(--danger);
+  }
   .brand-mark{
     position:absolute;
     top:20px;
@@ -347,6 +391,11 @@
       </div>
     </div>
 
+    <div class="sort-toggle">
+      <button id="sortBySite" class="active">Trier par site</button>
+      <button id="sortByDate">Trier par date</button>
+    </div>
+
     <div class="card search-box">
       <label for="searchInput">Rechercher un agent ou un site</label>
       <input type="text" id="searchInput" placeholder="Ex : Pedro, La Défense..." autocomplete="off">
@@ -354,7 +403,7 @@
 
     <div class="card">
       <div class="log-header">
-        <h2>Historique</h2>
+        <h2 id="logHeading">Historique par site</h2>
         <span class="log-count" id="logCount">0</span>
       </div>
       <div class="log-list" id="logList" style="max-height:480px;">
@@ -500,6 +549,7 @@ document.getElementById('validateBtn').addEventListener('click', async () => {
 
 // ---- Vue admin : récapitulatif complet ----
 let allEntriesCache = [];
+let sortMode = 'site'; // 'site' ou 'date'
 
 function formatDayHeading(iso){
   const d = new Date(iso);
@@ -510,6 +560,74 @@ function formatDayHeading(iso){
 function dayKey(iso){
   const d = new Date(iso);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function renderEntryItem(e){
+  return `
+    <div class="log-item" style="margin-bottom:8px;">
+      <div style="display:flex; align-items:center; flex:1; justify-content:space-between;">
+        <div>
+          <div class="name">${escapeHtml(e.name)}</div>
+          <div class="site">${escapeHtml(e.site)} &middot; ${formatDayHeading(e.time)}</div>
+        </div>
+        <div class="time">${formatTime(e.time)}</div>
+      </div>
+      <button class="delete-entry-btn"
+        data-time="${escapeHtml(e.time)}"
+        data-name="${escapeHtml(e.name)}"
+        data-site="${escapeHtml(e.site)}"
+        title="Supprimer cette entrée">&#10005;</button>
+    </div>
+  `;
+}
+
+function renderBySite(entries){
+  const bySite = {};
+  for(const e of entries){
+    const key = e.site || 'Autre';
+    if(!bySite[key]) bySite[key] = [];
+    bySite[key].push(e);
+  }
+  const siteNames = Object.keys(bySite).sort((a, b) => a.localeCompare(b, 'fr'));
+
+  return siteNames.map(site => {
+    const items = [...bySite[site]].sort((a,b) => new Date(b.time) - new Date(a.time));
+    return `
+      <div class="day-group">
+        <div class="day-heading" style="display:flex; justify-content:space-between; text-transform:none;">
+          <span>${escapeHtml(site)}</span>
+          <span style="color:var(--cyan); font-weight:600;">${items.length}</span>
+        </div>
+        ${items.map(renderEntryItem).join('')}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderByDate(entries){
+  const sorted = [...entries].sort((a,b) => new Date(b.time) - new Date(a.time));
+  const groups = [];
+  let currentKey = null;
+  let currentGroup = null;
+  for(const e of sorted){
+    const k = dayKey(e.time);
+    if(k !== currentKey){
+      currentKey = k;
+      currentGroup = { heading: formatDayHeading(e.time), items: [] };
+      groups.push(currentGroup);
+    }
+    currentGroup.items.push(e);
+  }
+
+  return groups.map(g => `
+    <div class="day-group">
+      <div class="day-heading" style="display:flex; justify-content:space-between;">
+        <span>${escapeHtml(g.heading)}</span>
+        <span style="color:var(--cyan); font-weight:600; text-transform:none;">${g.items.length}</span>
+      </div>
+      ${g.items.map(renderEntryItem).join('')}
+    </div>
+  `).join('');
 }
 
 function renderLog(entries){
@@ -527,36 +645,48 @@ function renderLog(entries){
     return;
   }
 
-  const sorted = [...entries].sort((a,b) => new Date(b.time) - new Date(a.time));
-
-  const groups = [];
-  let currentKey = null;
-  let currentGroup = null;
-  for(const e of sorted){
-    const k = dayKey(e.time);
-    if(k !== currentKey){
-      currentKey = k;
-      currentGroup = { heading: formatDayHeading(e.time), items: [] };
-      groups.push(currentGroup);
-    }
-    currentGroup.items.push(e);
-  }
-
-  list.innerHTML = groups.map(g => `
-    <div class="day-group">
-      <div class="day-heading">${escapeHtml(g.heading)}</div>
-      ${g.items.map(e => `
-        <div class="log-item" style="margin-bottom:8px;">
-          <div>
-            <div class="name">${escapeHtml(e.name)}</div>
-            <div class="site">${escapeHtml(e.site)}</div>
-          </div>
-          <div class="time">${formatTime(e.time)}</div>
-        </div>
-      `).join('')}
-    </div>
-  `).join('');
+  list.innerHTML = sortMode === 'site' ? renderBySite(entries) : renderByDate(entries);
 }
+
+document.getElementById('sortBySite').addEventListener('click', () => {
+  sortMode = 'site';
+  document.getElementById('sortBySite').classList.add('active');
+  document.getElementById('sortByDate').classList.remove('active');
+  document.getElementById('logHeading').textContent = 'Historique par site';
+  applyFilter();
+});
+
+document.getElementById('sortByDate').addEventListener('click', () => {
+  sortMode = 'date';
+  document.getElementById('sortByDate').classList.add('active');
+  document.getElementById('sortBySite').classList.remove('active');
+  document.getElementById('logHeading').textContent = 'Historique par date';
+  applyFilter();
+});
+
+async function deleteEntry(time, name, site){
+  await fetch(BACKEND_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'delete', time, name, site })
+  });
+  await new Promise(r => setTimeout(r, 800));
+  allEntriesCache = await loadEntries();
+  applyFilter();
+}
+
+document.getElementById('logList').addEventListener('click', (e) => {
+  const btn = e.target.closest('.delete-entry-btn');
+  if(!btn) return;
+
+  const { time, name, site } = btn.dataset;
+  const ok = confirm(`Supprimer la prise de service de ${name} (${site}) ?`);
+  if(!ok) return;
+
+  btn.disabled = true;
+  deleteEntry(time, name, site);
+});
 
 function applyFilter(){
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
