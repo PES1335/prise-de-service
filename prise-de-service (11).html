@@ -483,7 +483,7 @@
   <div id="adminView" class="hidden">
     <span class="back-link" id="backFromAdmin">&larr; Retour à la vue agent</span>
     <div class="brand" style="text-align:left; margin-bottom:16px;">
-      <span class="badge-admin">Administrateur</span>
+      <span class="badge-admin" id="adminAgencyBadge">Administrateur</span>
       <h1 style="font-size:19px; margin:0 0 4px;">Suivi complet des prises de service</h1>
     </div>
 
@@ -507,12 +507,8 @@
       <div class="log-header">
         <h2>Gérer les sites</h2>
       </div>
-      <label for="manageAgency">Agence</label>
-      <select id="manageAgency">
-        <option value="Île-de-France">Île-de-France</option>
-        <option value="Nord">Nord</option>
-        <option value="Sud">Sud</option>
-      </select>
+      <label>Agence</label>
+      <div id="manageAgencyLabel" style="background:var(--panel-2); border:1px solid var(--border-strong); border-radius:8px; padding:10px 12px; margin-bottom:14px; color:var(--violet); font-weight:600; font-size:14px;"></div>
       <label for="manageSiteName">Nom du nouveau site</label>
       <input type="text" id="manageSiteName" placeholder="Ex : Site Toulouse Centre" autocomplete="off">
       <button id="addSiteBtn" style="background:var(--panel-2); border:1px solid var(--border-strong); color:var(--text); margin-bottom:14px;">
@@ -564,7 +560,13 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-const ADMIN_CODE = "1234"; // à modifier si besoin
+// Un code d'accès distinct par agence — chaque agence ne voit que ses propres données
+const ADMIN_CODES = {
+  "1234": "Île-de-France",
+  "5678": "Nord",
+  "9012": "Sud"
+};
+let currentAdminAgency = null;
 
 // Colle ici l'URL /exec récupérée depuis Apps Script (Déployer > Application Web)
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbzpGPXahkDilPHtiEtpLA9Oz-dAx2uws45LcpqpkSh0wJuJvakCT8XlBqJZBlEOtnRy/exec";
@@ -647,9 +649,10 @@ async function loadAndRenderManagedSites(){
 
 function renderManagedSites(){
   const container = document.getElementById('manageSitesList');
-  const agency = document.getElementById('manageAgency').value;
-  const sitesForAgency = customSitesCache.filter(s => s.agency === agency);
+  const agency = currentAdminAgency;
+  document.getElementById('manageAgencyLabel').textContent = agency;
 
+  const sitesForAgency = customSitesCache.filter(s => s.agency === agency);
   const defaultSites = (DEFAULT_SITES_BY_AGENCY[agency] || []).map(s => ({ agency, site: s.value, isDefault: true }));
   const all = [...defaultSites, ...sitesForAgency.map(s => ({ ...s, isDefault: false }))];
 
@@ -666,10 +669,8 @@ function renderManagedSites(){
   `).join('');
 }
 
-document.getElementById('manageAgency').addEventListener('change', renderManagedSites);
-
 document.getElementById('addSiteBtn').addEventListener('click', async () => {
-  const agency = document.getElementById('manageAgency').value;
+  const agency = currentAdminAgency;
   const siteInput = document.getElementById('manageSiteName');
   const siteName = siteInput.value.trim();
 
@@ -721,12 +722,13 @@ document.getElementById('manageSitesList').addEventListener('click', async (e) =
 
 function populateExportSiteSelect(){
   const select = document.getElementById('exportSite');
-  const allSites = new Set();
-  Object.values(DEFAULT_SITES_BY_AGENCY).forEach(list => list.forEach(s => allSites.add(s.value)));
-  customSitesCache.forEach(s => allSites.add(s.site));
+  const agency = currentAdminAgency;
+  const sites = new Set();
+  (DEFAULT_SITES_BY_AGENCY[agency] || []).forEach(s => sites.add(s.value));
+  customSitesCache.filter(s => s.agency === agency).forEach(s => sites.add(s.site));
 
   select.innerHTML = '<option value="">Tous les sites</option>' +
-    [...allSites].sort((a,b) => a.localeCompare(b, 'fr')).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    [...sites].sort((a,b) => a.localeCompare(b, 'fr')).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
 }
 
 async function loadEntries(){
@@ -785,7 +787,10 @@ document.getElementById('backFromAdmin').addEventListener('click', () => showVie
 document.getElementById('loginBtn').addEventListener('click', () => {
   const input = document.getElementById('adminCode');
   const err = document.getElementById('codeError');
-  if(input.value === ADMIN_CODE){
+  const agency = ADMIN_CODES[input.value];
+  if(agency){
+    currentAdminAgency = agency;
+    document.getElementById('adminAgencyBadge').textContent = `Administrateur — ${agency}`;
     err.style.display = 'none';
     showView(adminView);
     refreshAdminLog();
@@ -924,15 +929,21 @@ function renderByDate(entries){
   `).join('');
 }
 
+// Ne retourne que les entrées appartenant à l'agence actuellement connectée
+function scopedEntries(){
+  return allEntriesCache.filter(e => e.agency === currentAdminAgency);
+}
+
 function renderLog(entries){
   const list = document.getElementById('logList');
   const count = document.getElementById('logCount');
   const statTotal = document.getElementById('statTotal');
   const statAgents = document.getElementById('statAgents');
+  const scoped = scopedEntries();
 
   count.textContent = entries.length;
-  statTotal.textContent = allEntriesCache.length;
-  statAgents.textContent = new Set(allEntriesCache.map(e => e.name.trim().toLowerCase())).size;
+  statTotal.textContent = scoped.length;
+  statAgents.textContent = new Set(scoped.map(e => e.name.trim().toLowerCase())).size;
 
   if(entries.length === 0){
     list.innerHTML = '<div class="empty">Aucune prise de service enregistrée pour l\'instant.</div>';
@@ -991,7 +1002,7 @@ function entriesForExport(){
   const from = fromVal ? new Date(fromVal + 'T00:00:00') : null;
   const to = toVal ? new Date(toVal + 'T23:59:59') : null;
 
-  return allEntriesCache.filter(e => {
+  return scopedEntries().filter(e => {
     if(site && e.site !== site) return false;
     const t = new Date(e.time);
     if(from && t < from) return false;
@@ -1105,11 +1116,12 @@ function groupEntriesForExport(entries, mode){
 
 function applyFilter(){
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const scoped = scopedEntries();
   if(!q){
-    renderLog(allEntriesCache);
+    renderLog(scoped);
     return;
   }
-  const filtered = allEntriesCache.filter(e =>
+  const filtered = scoped.filter(e =>
     e.name.toLowerCase().includes(q) || e.site.toLowerCase().includes(q)
   );
   renderLog(filtered);
@@ -1120,14 +1132,16 @@ document.getElementById('searchInput').addEventListener('input', applyFilter);
 async function refreshAdminLog(){
   if(adminView.classList.contains('hidden')) return;
 
-  const previousCount = allEntriesCache.length;
-  const previousIds = new Set(allEntriesCache.map(e => `${e.time}|${e.name}|${e.site}`));
+  const previousScoped = scopedEntries();
+  const previousCount = previousScoped.length;
+  const previousIds = new Set(previousScoped.map(e => `${e.time}|${e.name}|${e.site}`));
 
   allEntriesCache = await loadEntries();
   applyFilter();
 
-  if(previousCount > 0 && allEntriesCache.length > previousCount){
-    const newOnes = allEntriesCache.filter(e => !previousIds.has(`${e.time}|${e.name}|${e.site}`));
+  const newScoped = scopedEntries();
+  if(previousCount > 0 && newScoped.length > previousCount){
+    const newOnes = newScoped.filter(e => !previousIds.has(`${e.time}|${e.name}|${e.site}`));
     if(newOnes.length > 0){
       newOnes.sort((a,b) => new Date(b.time) - new Date(a.time));
       notifyNewEntry(newOnes[0], newOnes.length);
