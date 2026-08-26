@@ -21,13 +21,24 @@
   *{box-sizing:border-box;}
   body{
     margin:0;
-    background:radial-gradient(circle at top, #10182B 0%, #0B1220 60%);
+    background:#0B1220;
     color:var(--text);
     font-family:'Segoe UI', system-ui, sans-serif;
     min-height:100vh;
     padding:24px 16px 60px;
+    position:relative;
+    overflow-x:hidden;
   }
-  .wrap{max-width:480px;margin:0 auto;}
+  #bgCanvas{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100vw;
+    height:100vh;
+    z-index:0;
+    pointer-events:none;
+  }
+  .wrap{max-width:480px;margin:0 auto; position:relative; z-index:1;}
   .brand{
     text-align:center;
     margin-bottom:22px;
@@ -457,6 +468,8 @@
     align-items:center;
     justify-content:center;
     padding:24px;
+    position:relative;
+    z-index:1;
   }
   .home-hero{
     max-width:420px;
@@ -552,9 +565,19 @@
     text-underline-offset:3px;
   }
   .home-admin-link:hover{ color:var(--cyan); }
+  .home-links-row{
+    display:flex;
+    justify-content:center;
+    gap:20px;
+    margin-top:18px;
+  }
+  .home-links-row .home-admin-link{
+    margin-top:0;
+  }
 </style>
 </head>
 <body>
+<canvas id="bgCanvas"></canvas>
 <div class="brand-mark">
   <div class="values">
     <span>Intégrité</span>
@@ -595,7 +618,10 @@
       </div>
 
       <button id="homeContinueBtn">Accéder à l'outil</button>
-      <div class="home-admin-link" id="homeAdminLink">Espace administrateur</div>
+      <div class="home-links-row">
+        <span class="home-admin-link" id="homeAdminLink">Espace administrateur</span>
+        <span class="home-admin-link" id="homeClientLink">Espace client</span>
+      </div>
     </div>
   </div>
 
@@ -649,6 +675,41 @@
     <div class="foot">Votre validation est horodatée et transmise à l'administrateur.</div>
   </div>
 
+  <!-- ===== VUE CLIENT ===== -->
+  <div id="clientView" class="hidden">
+    <span class="back-link" id="backFromClient">&larr; Retour</span>
+    <div class="brand" style="text-align:left; margin-bottom:16px;">
+      <div class="eyebrow">Espace client</div>
+      <h1 style="font-size:19px;">Signaler une absence</h1>
+    </div>
+
+    <div class="card">
+      <div class="success-banner" id="clientSuccessBanner">
+        <span>&#9888;</span>
+        <span id="clientSuccessText">Signalement transmis à l'administrateur.</span>
+      </div>
+
+      <label for="clientAgencySelect">Agence</label>
+      <select id="clientAgencySelect">
+        <option value="Île-de-France">Île-de-France</option>
+        <option value="Nord">Nord</option>
+        <option value="Sud">Sud</option>
+      </select>
+
+      <label for="clientSiteSelect">Site concerné</label>
+      <select id="clientSiteSelect"></select>
+
+      <label for="clientNote">Précision (optionnel)</label>
+      <input type="text" id="clientNote" placeholder="Ex : aucun agent présent depuis 8h" autocomplete="off">
+
+      <button id="reportAbsenceBtn" style="background:linear-gradient(90deg, #F0708C, #E4002B);">
+        &#9888; Signaler une absence
+      </button>
+    </div>
+
+    <div class="foot">Ce signalement est immédiatement transmis à l'administrateur de l'agence concernée.</div>
+  </div>
+
   <!-- ===== VUE CONNEXION ADMIN ===== -->
   <div id="adminLoginView" class="hidden">
     <span class="back-link" id="backFromLogin">&larr; Retour</span>
@@ -681,6 +742,14 @@
         <div class="stat-label">Agents distincts</div>
         <div class="stat-value" id="statAgents">0</div>
       </div>
+    </div>
+
+    <div class="card" id="reportsCard" style="display:none; border-color:var(--danger);">
+      <div class="log-header">
+        <h2 style="color:var(--danger);">&#9888; Signalements clients</h2>
+        <span class="log-count" id="reportsCount" style="color:var(--danger);">0</span>
+      </div>
+      <div id="reportsList" class="log-list" style="max-height:220px;"></div>
     </div>
 
     <div class="sort-toggle">
@@ -813,13 +882,55 @@ function refreshSiteOptions(){
   siteSelect.innerHTML = sites.map(s => `<option value="${escapeHtml(s.value)}">${escapeHtml(s.label)}</option>`).join('');
 }
 
+function refreshClientSiteOptions(){
+  const agency = document.getElementById('clientAgencySelect').value;
+  const siteSelect = document.getElementById('clientSiteSelect');
+  const sites = (SITES_BY_AGENCY[agency] || []).concat([{ value: 'Autre', label: 'Autre site' }]);
+  siteSelect.innerHTML = sites.map(s => `<option value="${escapeHtml(s.value)}">${escapeHtml(s.label)}</option>`).join('');
+}
+
 document.getElementById('agencySelect').addEventListener('change', refreshSiteOptions);
+document.getElementById('clientAgencySelect').addEventListener('change', refreshClientSiteOptions);
 loadCustomSites().then(() => {
   refreshSiteOptions();
+  refreshClientSiteOptions();
 });
 
 // ---- Vue admin : gestion des sites ----
 let customSitesCache = [];
+
+async function loadAndRenderReports(){
+  try{
+    const res = await fetch(BACKEND_URL + '?action=reports');
+    const allReports = await res.json();
+    const scoped = allReports.filter(r => r.agency === currentAdminAgency);
+
+    const card = document.getElementById('reportsCard');
+    const list = document.getElementById('reportsList');
+    const count = document.getElementById('reportsCount');
+
+    if(scoped.length === 0){
+      card.style.display = 'none';
+      return;
+    }
+
+    card.style.display = 'block';
+    count.textContent = scoped.length;
+
+    const sorted = [...scoped].sort((a,b) => new Date(b.time) - new Date(a.time));
+    list.innerHTML = sorted.map(r => `
+      <div class="log-item" style="margin-bottom:8px; border-color:var(--danger);">
+        <div>
+          <div class="name">${escapeHtml(r.site)}</div>
+          <div class="site">${r.note ? escapeHtml(r.note) + ' &middot; ' : ''}${formatDayHeading(r.time)}</div>
+        </div>
+        <div class="time" style="color:var(--danger);">${formatTime(r.time)}</div>
+      </div>
+    `).join('');
+  }catch(e){
+    // silencieux si le chargement échoue
+  }
+}
 
 async function loadAndRenderManagedSites(){
   try{
@@ -926,14 +1037,34 @@ async function loadEntries(){
   }
 }
 
+function getLocation(){
+  return new Promise((resolve) => {
+    if(!navigator.geolocation){
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null), // refusé ou indisponible — on continue sans bloquer
+      { timeout: 6000 }
+    );
+  });
+}
+
 async function saveEntry(name, site, agency, poste){
+  const location = await getLocation();
+
   // mode no-cors : on ne peut pas lire la réponse, mais l'écriture
   // côté Apps Script s'exécute quand même normalement.
   await fetch(BACKEND_URL, {
     method: 'POST',
     mode: 'no-cors',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ name, site, agency, poste })
+    body: JSON.stringify({
+      name, site, agency, poste,
+      lat: location ? location.lat : '',
+      lng: location ? location.lng : ''
+    })
   });
 
   // Comme la réponse est opaque en no-cors, on vérifie que
@@ -950,12 +1081,14 @@ async function saveEntry(name, site, agency, poste){
 // ---- Navigation entre vues ----
 const homeView = document.getElementById('homeView');
 const agentView = document.getElementById('agentView');
+const clientView = document.getElementById('clientView');
 const adminLoginView = document.getElementById('adminLoginView');
 const adminView = document.getElementById('adminView');
 
 function showView(view){
   homeView.classList.add('hidden');
   agentView.classList.add('hidden');
+  clientView.classList.add('hidden');
   adminLoginView.classList.add('hidden');
   adminView.classList.add('hidden');
   view.classList.remove('hidden');
@@ -971,6 +1104,13 @@ document.getElementById('homeAdminLink').addEventListener('click', () => {
   document.getElementById('codeError').style.display = 'none';
   document.getElementById('adminCode').focus();
 });
+
+document.getElementById('homeClientLink').addEventListener('click', () => {
+  showView(clientView);
+  refreshClientSiteOptions();
+});
+
+document.getElementById('backFromClient').addEventListener('click', () => showView(homeView));
 
 document.getElementById('showAdminLogin').addEventListener('click', () => {
   showView(adminLoginView);
@@ -993,6 +1133,7 @@ document.getElementById('loginBtn').addEventListener('click', () => {
     showView(adminView);
     refreshAdminLog();
     loadAndRenderManagedSites();
+    loadAndRenderReports();
   }else{
     err.style.display = 'block';
     input.value = '';
@@ -1005,6 +1146,66 @@ document.getElementById('adminCode').addEventListener('keydown', (e) => {
 });
 
 // ---- Vue agent : validation ----
+// ---- Fond animé : vagues de points ----
+(function(){
+  const canvas = document.getElementById('bgCanvas');
+  const ctx = canvas.getContext('2d');
+  let width, height, dpr;
+
+  function resize(){
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const COLS = 70;
+  const ROWS = 26;
+  const violet = [155, 124, 240]; // #9B7CF0
+
+  let t = 0;
+
+  function draw(){
+    ctx.clearRect(0, 0, width, height);
+
+    const horizonY = height * 0.28;
+    const baseY = height * 1.05;
+
+    for(let row = 0; row < ROWS; row++){
+      const rowT = row / (ROWS - 1); // 0 = horizon, 1 = bas de l'écran
+      const y0 = horizonY + (baseY - horizonY) * (rowT * rowT); // perspective : lignes plus serrées en haut
+      const spacingX = width / COLS;
+      const amplitude = 6 + rowT * 26;
+      const dotSize = 0.6 + rowT * 1.8;
+      const opacity = 0.06 + rowT * 0.4;
+
+      for(let col = 0; col <= COLS; col++){
+        const x = col * spacingX;
+        const wave =
+          Math.sin(col * 0.25 + t * 0.6 + row * 0.4) * amplitude +
+          Math.sin(col * 0.12 - t * 0.35 + row * 0.15) * amplitude * 0.6;
+        const y = y0 + wave;
+
+        ctx.beginPath();
+        ctx.arc(x, y, dotSize, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${violet[0]}, ${violet[1]}, ${violet[2]}, ${opacity})`;
+        ctx.fill();
+      }
+    }
+
+    t += 0.012;
+    requestAnimationFrame(draw);
+  }
+
+  draw();
+})();
+
 document.getElementById('dateLabel').textContent = formatDateLabel();
 
 // Tap pour révéler les valeurs Securitas (fonctionne aussi sur mobile, en plus du survol souris)
@@ -1054,6 +1255,37 @@ document.getElementById('validateBtn').addEventListener('click', async () => {
   }
 });
 
+document.getElementById('reportAbsenceBtn').addEventListener('click', async () => {
+  const agency = document.getElementById('clientAgencySelect').value;
+  const site = document.getElementById('clientSiteSelect').value;
+  const note = document.getElementById('clientNote').value.trim();
+  const btn = document.getElementById('reportAbsenceBtn');
+  const banner = document.getElementById('clientSuccessBanner');
+  const successText = document.getElementById('clientSuccessText');
+
+  btn.disabled = true;
+  btn.textContent = 'Envoi...';
+
+  try{
+    await fetch(BACKEND_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'reportAbsence', agency, site, note })
+    });
+    await new Promise(r => setTimeout(r, 800));
+
+    successText.textContent = `Signalement transmis pour ${site}.`;
+    banner.style.display = 'flex';
+    document.getElementById('clientNote').value = '';
+  }catch(e){
+    alert("Erreur d'envoi, réessayez.");
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = '&#9888; Signaler une absence';
+  }
+});
+
 // ---- Vue admin : récapitulatif complet ----
 let allEntriesCache = [];
 let sortMode = 'site'; // 'site' ou 'date'
@@ -1072,12 +1304,15 @@ function dayKey(iso){
 function renderEntryItem(e){
   const agencyBadge = e.agency ? `<span style="color:var(--violet); font-weight:600;">${escapeHtml(e.agency)}</span> &middot; ` : '';
   const posteBadge = e.poste ? ` &middot; <span style="color:var(--cyan);">${escapeHtml(e.poste)}</span>` : '';
+  const mapLink = (e.lat && e.lng)
+    ? ` &middot; <a href="https://www.google.com/maps?q=${e.lat},${e.lng}" target="_blank" style="color:var(--ok); text-decoration:none;">&#128205; Position</a>`
+    : '';
   return `
     <div class="log-item" style="margin-bottom:8px;">
       <div style="display:flex; align-items:center; flex:1; justify-content:space-between;">
         <div>
           <div class="name">${escapeHtml(e.name)}${posteBadge}</div>
-          <div class="site">${agencyBadge}${escapeHtml(e.site)} &middot; ${formatDayHeading(e.time)}</div>
+          <div class="site">${agencyBadge}${escapeHtml(e.site)} &middot; ${formatDayHeading(e.time)}${mapLink}</div>
         </div>
         <div class="time">${formatTime(e.time)}</div>
       </div>
@@ -1413,6 +1648,7 @@ document.getElementById('loginBtn').addEventListener('click', () => {
 });
 
 setInterval(refreshAdminLog, 15000);
+setInterval(() => { if(!adminView.classList.contains('hidden')) loadAndRenderReports(); }, 15000);
 </script>
 
 </body>
