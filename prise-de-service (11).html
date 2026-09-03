@@ -986,13 +986,48 @@ function renderManagedSites(){
       <div style="display:flex; gap:6px;">
         <button class="calibrate-site-btn" data-agency="${escapeHtml(s.agency)}" data-sitename="${escapeHtml(s.site)}"
           style="width:28px; height:28px; min-width:28px; padding:0; background:transparent; border:1px solid var(--border-strong); border-radius:6px; color:var(--cyan); cursor:pointer;"
-          title="Calibrer cette position (à faire depuis le site)">&#128205;</button>
+          title="Calibrer avec ma position actuelle (être sur place)">&#128205;</button>
+        <button class="manual-coord-btn" data-agency="${escapeHtml(s.agency)}" data-sitename="${escapeHtml(s.site)}"
+          style="width:28px; height:28px; min-width:28px; padding:0; background:transparent; border:1px solid var(--border-strong); border-radius:6px; color:var(--violet); cursor:pointer;"
+          title="Saisir les coordonnées manuellement (ex: via Google Maps)">&#9998;</button>
         ${s.isDefault ? '' : `<button class="delete-entry-btn" data-agency="${escapeHtml(s.agency)}" data-sitename="${escapeHtml(s.site)}" title="Supprimer ce site">&#10005;</button>`}
       </div>
     </div>
   `;
   }).join('');
 }
+
+document.getElementById('manageSitesList').addEventListener('click', async (e) => {
+  const manualBtn = e.target.closest('.manual-coord-btn');
+  if(manualBtn){
+    const { agency, sitename } = manualBtn.dataset;
+    const input = prompt(
+      `Coordonnées GPS de "${sitename}"\n\nAstuce : ouvre Google Maps, clique droit sur le point exact du site, copie les deux nombres affichés en haut (ex: 48.7825, 2.0357).\n\nColle-les ici (latitude, longitude) :`
+    );
+    if(!input) return;
+
+    const parts = input.split(',').map(s => s.trim());
+    const lat = parseFloat(parts[0]);
+    const lng = parseFloat(parts[1]);
+
+    if(parts.length !== 2 || isNaN(lat) || isNaN(lng)){
+      alert('Format invalide. Attendu : latitude, longitude (ex: 48.7825, 2.0357)');
+      return;
+    }
+
+    manualBtn.disabled = true;
+    await fetch(BACKEND_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'setSiteCoord', agency, site: sitename, lat, lng })
+    });
+    await new Promise(r => setTimeout(r, 800));
+    await loadSiteCoords();
+    renderManagedSites();
+    manualBtn.disabled = false;
+  }
+});
 
 document.getElementById('manageSitesList').addEventListener('click', async (e) => {
   const calibBtn = e.target.closest('.calibrate-site-btn');
