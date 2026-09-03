@@ -320,6 +320,118 @@
   .site-entries-inner{
     padding:4px 0 4px 4px;
   }
+
+  /* ---- Carte 3D des sites ---- */
+  .map3d-wrap{
+    perspective:1000px;
+    padding:30px 0 60px;
+  }
+  .map3d-board{
+    position:relative;
+    height:280px;
+    transform-style:preserve-3d;
+    transform:rotateX(55deg) rotateZ(0deg);
+    background-image:
+      linear-gradient(rgba(79,217,232,0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,217,232,0.12) 1px, transparent 1px);
+    background-size:28px 28px;
+    border:1px solid rgba(79,217,232,0.15);
+    border-radius:4px;
+  }
+  .map3d-marker{
+    position:absolute;
+    transform:translate(-50%, -50%) translateZ(20px);
+    cursor:pointer;
+    text-align:center;
+  }
+  .map3d-marker-dot{
+    width:14px;
+    height:14px;
+    border-radius:50%;
+    background:var(--cyan);
+    box-shadow:0 0 12px 3px rgba(79,217,232,0.7);
+    margin:0 auto;
+    animation:markerFloat 2.6s ease-in-out infinite;
+    transform:rotateX(-55deg);
+  }
+  .map3d-marker.alert .map3d-marker-dot{
+    background:var(--danger);
+    box-shadow:0 0 12px 3px rgba(240,112,140,0.7);
+  }
+  @keyframes markerFloat{
+    0%, 100%{ transform:rotateX(-55deg) translateY(0) scale(1); }
+    50%{ transform:rotateX(-55deg) translateY(-4px) scale(1.15); }
+  }
+  .map3d-marker-label{
+    margin-top:4px;
+    font-size:9px;
+    color:var(--text-dim);
+    white-space:nowrap;
+    transform:rotateX(-55deg);
+    letter-spacing:0.3px;
+  }
+  .holo-card{
+    position:absolute;
+    bottom:calc(100% + 8px);
+    left:50%;
+    transform:rotateX(-55deg) translateX(-50%) translateY(8px) scale(0.85);
+    transform-origin:bottom center;
+    width:170px;
+    background:rgba(17, 26, 46, 0.92);
+    border:1px solid var(--cyan);
+    border-radius:8px;
+    padding:10px 12px;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.25s ease, transform 0.25s ease;
+    box-shadow:0 0 24px rgba(79,217,232,0.35);
+    backdrop-filter:blur(4px);
+    overflow:hidden;
+    z-index:5;
+  }
+  .holo-card::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:repeating-linear-gradient(
+      0deg,
+      rgba(79,217,232,0.06) 0px,
+      rgba(79,217,232,0.06) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    animation:holoScan 3s linear infinite;
+    pointer-events:none;
+  }
+  @keyframes holoScan{
+    0%{ transform:translateY(0); }
+    100%{ transform:translateY(12px); }
+  }
+  .map3d-marker:hover .holo-card,
+  .map3d-marker.holo-open .holo-card{
+    opacity:1;
+    transform:rotateX(-55deg) translateX(-50%) translateY(0) scale(1);
+    pointer-events:auto;
+  }
+  .holo-card-title{
+    font-size:12px;
+    font-weight:600;
+    color:var(--cyan);
+    margin-bottom:4px;
+    position:relative;
+  }
+  .holo-card-stat{
+    font-size:11px;
+    color:var(--text-dim);
+    margin-bottom:2px;
+    position:relative;
+  }
+  .holo-card-hint{
+    font-size:10px;
+    color:var(--violet);
+    margin-top:6px;
+    position:relative;
+  }
   .day-heading{
     font-size:12px;
     color:var(--text-dim);
@@ -819,6 +931,19 @@
     <div class="sort-toggle">
       <button id="sortBySite" class="active">Trier par site</button>
       <button id="sortByDate">Trier par date</button>
+      <button id="showMap3d">Carte 3D</button>
+    </div>
+
+    <div id="map3dCard" class="card hidden">
+      <div class="log-header">
+        <h2>Carte des sites</h2>
+        <span class="log-count" id="map3dCount">0</span>
+      </div>
+      <div class="map3d-wrap">
+        <div class="map3d-board" id="map3dBoard"></div>
+      </div>
+      <div class="foot" style="margin-top:10px;">Survole ou tape un site pour un aperçu &middot; clique pour ouvrir son historique complet.</div>
+      <div id="map3dDetail"></div>
     </div>
 
     <div class="card">
@@ -1597,7 +1722,10 @@ document.getElementById('sortBySite').addEventListener('click', () => {
   sortMode = 'site';
   document.getElementById('sortBySite').classList.add('active');
   document.getElementById('sortByDate').classList.remove('active');
+  document.getElementById('showMap3d').classList.remove('active');
   document.getElementById('logHeading').textContent = 'Historique par site';
+  document.getElementById('map3dCard').classList.add('hidden');
+  showListCards(true);
   applyFilter();
 });
 
@@ -1605,8 +1733,121 @@ document.getElementById('sortByDate').addEventListener('click', () => {
   sortMode = 'date';
   document.getElementById('sortByDate').classList.add('active');
   document.getElementById('sortBySite').classList.remove('active');
+  document.getElementById('showMap3d').classList.remove('active');
   document.getElementById('logHeading').textContent = 'Historique par date';
+  document.getElementById('map3dCard').classList.add('hidden');
+  showListCards(true);
   applyFilter();
+});
+
+function showListCards(show){
+  const searchBox = document.querySelector('.search-box');
+  const historyCard = document.getElementById('logList').closest('.card');
+  if(searchBox) searchBox.style.display = show ? '' : 'none';
+  if(historyCard) historyCard.style.display = show ? '' : 'none';
+}
+
+document.getElementById('showMap3d').addEventListener('click', () => {
+  sortMode = 'map';
+  document.getElementById('showMap3d').classList.add('active');
+  document.getElementById('sortBySite').classList.remove('active');
+  document.getElementById('sortByDate').classList.remove('active');
+  document.getElementById('map3dCard').classList.remove('hidden');
+  showListCards(false);
+  renderMap3d();
+});
+
+// Position stable et déterministe d'un site sur le plateau, basée sur son nom
+function siteHashPosition(name){
+  let hash = 0;
+  for(let i = 0; i < name.length; i++){
+    hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
+  }
+  const x = 15 + (Math.abs(hash) % 70); // 15% à 85%
+  const y = 20 + (Math.abs(hash >> 8) % 60); // 20% à 80%
+  return { x, y };
+}
+
+function renderMap3d(){
+  const board = document.getElementById('map3dBoard');
+  const scoped = scopedEntries();
+  const count = document.getElementById('map3dCount');
+
+  const bySite = {};
+  for(const e of scoped){
+    const key = e.site || 'Autre';
+    if(!bySite[key]) bySite[key] = [];
+    bySite[key].push(e);
+  }
+  const siteNames = Object.keys(bySite).sort((a,b) => a.localeCompare(b, 'fr'));
+  count.textContent = siteNames.length;
+
+  if(siteNames.length === 0){
+    board.innerHTML = '<div class="empty" style="transform:rotateX(-55deg);">Aucune donnée pour cette agence.</div>';
+    document.getElementById('map3dDetail').innerHTML = '';
+    return;
+  }
+
+  board.innerHTML = siteNames.map(site => {
+    const items = [...bySite[site]].sort((a,b) => new Date(b.time) - new Date(a.time));
+    const last = items[0];
+    const pos = siteHashPosition(site);
+    const hasAlert = items.some(e => {
+      if(!e.lat || !e.lng) return false;
+      const ref = getSiteCoord(e.agency, e.site);
+      if(!ref || !ref.lat || !ref.lng) return false;
+      return distanceMeters(parseFloat(e.lat), parseFloat(e.lng), parseFloat(ref.lat), parseFloat(ref.lng)) > DISTANCE_THRESHOLD_M;
+    });
+
+    return `
+      <div class="map3d-marker${hasAlert ? ' alert' : ''}" style="left:${pos.x}%; top:${pos.y}%;" data-site="${escapeHtml(site)}">
+        <div class="holo-card">
+          <div class="holo-card-title">${escapeHtml(site)}</div>
+          <div class="holo-card-stat">${items.length} prise(s) de service</div>
+          <div class="holo-card-stat">Dernière : ${escapeHtml(last.name)}, ${formatTime(last.time)}</div>
+          ${hasAlert ? '<div class="holo-card-stat" style="color:var(--danger);">&#9888; Position suspecte détectée</div>' : ''}
+          <div class="holo-card-hint">Toucher pour l'historique complet &rarr;</div>
+        </div>
+        <div class="map3d-marker-dot"></div>
+        <div class="map3d-marker-label">${escapeHtml(site)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+document.getElementById('map3dBoard').addEventListener('click', (e) => {
+  const marker = e.target.closest('.map3d-marker');
+  if(!marker) return;
+
+  // Sur mobile (pas de vrai survol), le premier tap ouvre l'hologramme, le second ouvre l'historique
+  if(!marker.classList.contains('holo-open')){
+    document.querySelectorAll('.map3d-marker.holo-open').forEach(m => m.classList.remove('holo-open'));
+    marker.classList.add('holo-open');
+    return;
+  }
+
+  const site = marker.dataset.site;
+  const scoped = scopedEntries().filter(e => e.site === site);
+  const sorted = [...scoped].sort((a,b) => new Date(b.time) - new Date(a.time));
+  const detail = document.getElementById('map3dDetail');
+  detail.innerHTML = `
+    <div class="day-heading" style="margin-top:16px; display:flex; justify-content:space-between;">
+      <span>${escapeHtml(site)}</span>
+      <span style="color:var(--cyan); font-weight:600; text-transform:none;">${sorted.length}</span>
+    </div>
+    ${sorted.map(renderEntryItem).join('')}
+  `;
+  detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+document.getElementById('map3dDetail').addEventListener('click', (e) => {
+  const btn = e.target.closest('.delete-entry-btn');
+  if(!btn) return;
+  const { time, name, site } = btn.dataset;
+  const ok = confirm(`Supprimer la prise de service de ${name} (${site}) ?`);
+  if(!ok) return;
+  btn.disabled = true;
+  deleteEntry(time, name, site);
 });
 
 async function deleteEntry(time, name, site){
