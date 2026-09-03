@@ -256,6 +256,70 @@
   .day-group:last-child{
     margin-bottom:0;
   }
+  .site-card{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px 14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    cursor:pointer;
+    margin-bottom:8px;
+    transition:border-color 0.15s;
+  }
+  .site-card:hover{
+    border-color:var(--cyan);
+  }
+  .site-card-left{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .site-card-icon{
+    width:32px;
+    height:32px;
+    border-radius:8px;
+    background:linear-gradient(135deg, var(--cyan), var(--violet));
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:15px;
+    flex-shrink:0;
+  }
+  .site-card-name{
+    font-size:14px;
+    font-weight:600;
+  }
+  .site-card-right{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .site-card-count{
+    font-size:13px;
+    color:var(--cyan);
+    font-weight:600;
+  }
+  .site-card-chevron{
+    color:var(--text-dim);
+    font-size:11px;
+    transition:transform 0.2s;
+  }
+  .site-card.expanded .site-card-chevron{
+    transform:rotate(90deg);
+  }
+  .site-entries{
+    max-height:0;
+    overflow:hidden;
+    transition:max-height 0.3s ease;
+  }
+  .site-entries.expanded{
+    max-height:3000px;
+  }
+  .site-entries-inner{
+    padding:4px 0 4px 4px;
+  }
   .day-heading{
     font-size:12px;
     color:var(--text-dim);
@@ -1456,15 +1520,24 @@ function renderBySite(entries){
   }
   const siteNames = Object.keys(bySite).sort((a, b) => a.localeCompare(b, 'fr'));
 
-  return siteNames.map(site => {
+  return siteNames.map((site, idx) => {
     const items = [...bySite[site]].sort((a,b) => new Date(b.time) - new Date(a.time));
+    const siteId = 'site-' + idx;
     return `
-      <div class="day-group">
-        <div class="day-heading" style="display:flex; justify-content:space-between; text-transform:none;">
-          <span>${escapeHtml(site)}</span>
-          <span style="color:var(--cyan); font-weight:600;">${items.length}</span>
+      <div class="site-card" data-target="${siteId}">
+        <div class="site-card-left">
+          <div class="site-card-icon">&#127970;</div>
+          <div class="site-card-name">${escapeHtml(site)}</div>
         </div>
-        ${items.map(renderEntryItem).join('')}
+        <div class="site-card-right">
+          <span class="site-card-count">${items.length}</span>
+          <span class="site-card-chevron">&#9654;</span>
+        </div>
+      </div>
+      <div class="site-entries" id="${siteId}">
+        <div class="site-entries-inner">
+          ${items.map(renderEntryItem).join('')}
+        </div>
       </div>
     `;
   }).join('');
@@ -1550,14 +1623,21 @@ async function deleteEntry(time, name, site){
 
 document.getElementById('logList').addEventListener('click', (e) => {
   const btn = e.target.closest('.delete-entry-btn');
-  if(!btn) return;
+  if(btn){
+    const { time, name, site } = btn.dataset;
+    const ok = confirm(`Supprimer la prise de service de ${name} (${site}) ?`);
+    if(!ok) return;
+    btn.disabled = true;
+    deleteEntry(time, name, site);
+    return;
+  }
 
-  const { time, name, site } = btn.dataset;
-  const ok = confirm(`Supprimer la prise de service de ${name} (${site}) ?`);
-  if(!ok) return;
-
-  btn.disabled = true;
-  deleteEntry(time, name, site);
+  const card = e.target.closest('.site-card');
+  if(card){
+    const target = document.getElementById(card.dataset.target);
+    card.classList.toggle('expanded');
+    target.classList.toggle('expanded');
+  }
 });
 
 // ---- Export PDF ----
