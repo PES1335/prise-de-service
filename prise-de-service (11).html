@@ -943,6 +943,21 @@ async function loadAndRenderManagedSites(){
   populateExportSiteSelect();
 }
 
+let siteCoordsCache = [];
+
+async function loadSiteCoords(){
+  try{
+    const res = await fetch(BACKEND_URL + '?action=siteCoords');
+    siteCoordsCache = await res.json();
+  }catch(e){
+    siteCoordsCache = [];
+  }
+}
+
+function getSiteCoord(agency, site){
+  return siteCoordsCache.find(c => c.agency === agency && c.site === site) || null;
+}
+
 function renderManagedSites(){
   const container = document.getElementById('manageSitesList');
   const agency = currentAdminAgency;
@@ -957,13 +972,56 @@ function renderManagedSites(){
     return;
   }
 
-  container.innerHTML = all.map(s => `
+  container.innerHTML = all.map(s => {
+    const coord = getSiteCoord(s.agency, s.site);
+    const calibStatus = coord
+      ? '<span style="color:var(--ok); font-size:11px;">&#10003; Calibré</span>'
+      : '<span style="color:var(--text-dim); font-size:11px;">Non calibré</span>';
+    return `
     <div class="log-item" style="margin-bottom:6px;">
-      <div class="name" style="font-size:13px;">${escapeHtml(s.site)}${s.isDefault ? ' <span style="color:var(--text-dim); font-size:11px;">(par défaut)</span>' : ''}</div>
-      ${s.isDefault ? '' : `<button class="delete-entry-btn" data-agency="${escapeHtml(s.agency)}" data-sitename="${escapeHtml(s.site)}" title="Supprimer ce site">&#10005;</button>`}
+      <div class="name" style="font-size:13px;">
+        ${escapeHtml(s.site)}${s.isDefault ? ' <span style="color:var(--text-dim); font-size:11px;">(par défaut)</span>' : ''}
+        <div style="margin-top:2px;">${calibStatus}</div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="calibrate-site-btn" data-agency="${escapeHtml(s.agency)}" data-sitename="${escapeHtml(s.site)}"
+          style="width:28px; height:28px; min-width:28px; padding:0; background:transparent; border:1px solid var(--border-strong); border-radius:6px; color:var(--cyan); cursor:pointer;"
+          title="Calibrer cette position (à faire depuis le site)">&#128205;</button>
+        ${s.isDefault ? '' : `<button class="delete-entry-btn" data-agency="${escapeHtml(s.agency)}" data-sitename="${escapeHtml(s.site)}" title="Supprimer ce site">&#10005;</button>`}
+      </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
+
+document.getElementById('manageSitesList').addEventListener('click', async (e) => {
+  const calibBtn = e.target.closest('.calibrate-site-btn');
+  if(calibBtn){
+    const { agency, sitename } = calibBtn.dataset;
+    const ok = confirm(`Calibrer la position de "${sitename}" avec ta position actuelle ? Assure-toi d'être bien sur place.`);
+    if(!ok) return;
+
+    calibBtn.disabled = true;
+    const loc = await getLocation();
+    if(!loc){
+      alert("Impossible de récupérer ta position. Vérifie que la géolocalisation est autorisée.");
+      calibBtn.disabled = false;
+      return;
+    }
+
+    await fetch(BACKEND_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'setSiteCoord', agency, site: sitename, lat: loc.lat, lng: loc.lng })
+    });
+    await new Promise(r => setTimeout(r, 800));
+    await loadSiteCoords();
+    renderManagedSites();
+    calibBtn.disabled = false;
+    return;
+  }
+});
 
 document.getElementById('addSiteBtn').addEventListener('click', async () => {
   const agency = currentAdminAgency;
@@ -1131,7 +1189,10 @@ document.getElementById('loginBtn').addEventListener('click', () => {
     document.getElementById('adminAgencyBadge').textContent = `Administrateur — ${agency}`;
     err.style.display = 'none';
     showView(adminView);
-    refreshAdminLog();
+    loadSiteCoords().then(() => {
+      renderManagedSites();
+      refreshAdminLog();
+    });
     loadAndRenderManagedSites();
     loadAndRenderReports();
   }else{
@@ -1301,18 +1362,44 @@ function dayKey(iso){
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
+// Formule de Haversine : distance en mètres entre deux points GPS
+function distanceMeters(lat1, lng1, lat2, lng2){
+  const R = 6371000;
+  const toRad = (v) => v * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+const DISTANCE_THRESHOLD_M = 300; // au-delà, on considère la position suspecte
+
 function renderEntryItem(e){
   const agencyBadge = e.agency ? `<span style="color:var(--violet); font-weight:600;">${escapeHtml(e.agency)}</span> &middot; ` : '';
   const posteBadge = e.poste ? ` &middot; <span style="color:var(--cyan);">${escapeHtml(e.poste)}</span>` : '';
   const mapLink = (e.lat && e.lng)
     ? ` &middot; <a href="https://www.google.com/maps?q=${e.lat},${e.lng}" target="_blank" style="color:var(--ok); text-decoration:none;">&#128205; Position</a>`
     : '';
+
+  let verdictBadge = '';
+  if(e.lat && e.lng){
+    const ref = getSiteCoord(e.agency, e.site);
+    if(ref && ref.lat && ref.lng){
+      const dist = Math.round(distanceMeters(parseFloat(e.lat), parseFloat(e.lng), parseFloat(ref.lat), parseFloat(ref.lng)));
+      verdictBadge = dist <= DISTANCE_THRESHOLD_M
+        ? ` <span style="color:var(--ok); font-size:11px;">&#10003; Position confirmée (${dist} m)</span>`
+        : ` <span style="color:var(--danger); font-weight:600; font-size:11px;">&#9888; Position éloignée (${dist > 1000 ? (dist/1000).toFixed(1) + ' km' : dist + ' m'})</span>`;
+    }
+  }
+
   return `
     <div class="log-item" style="margin-bottom:8px;">
       <div style="display:flex; align-items:center; flex:1; justify-content:space-between;">
         <div>
           <div class="name">${escapeHtml(e.name)}${posteBadge}</div>
           <div class="site">${agencyBadge}${escapeHtml(e.site)} &middot; ${formatDayHeading(e.time)}${mapLink}</div>
+          ${verdictBadge ? `<div style="margin-top:2px;">${verdictBadge}</div>` : ''}
         </div>
         <div class="time">${formatTime(e.time)}</div>
       </div>
